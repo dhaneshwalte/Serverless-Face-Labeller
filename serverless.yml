@@ -1,0 +1,191 @@
+service: csci-5409-term-assignment
+frameworkVersion: '3'
+
+plugins:
+  - serverless-offline
+  - serverless-step-functions
+provider:
+  name: aws
+  runtime: nodejs18.x
+  stage: dev
+  region: us-east-1
+  iam:
+    role: arn:aws:iam::299645166512:role/LabRole
+
+functions:
+  login:
+    handler: src/login.handler
+    events:
+      - http:
+          path: login
+          method: post
+          cors: true
+  register:
+    handler: src/register.handler
+    events:
+      - http:
+          path: register
+          method: post
+          cors: true
+  deleteSource:
+    handler: src/sourceOps.deleteHandler
+    events:
+      - http:
+          path: source/{email}/{label}
+          method: delete
+          cors: true
+  getSources:
+    handler: src/sourceOps.getAllLabelsHandler
+    events:
+      - http:
+          path: sources/{email}
+          method: get
+          cors: true
+  getSource:
+    handler: src/sourceOps.getByLabelHandler
+    events:
+      - http:
+          path: source/{email}/{label}
+          method: get
+          cors: true
+  sourceImportStatus:
+    handler: src/sourceOps.getImportStatusHandler
+    events:
+      - http:
+          path: source/import/{email}/{label}
+          method: get
+          cors: true
+  targetImportStatus:
+    handler: src/targetOps.getImportStatusHandler
+    events:
+      - http:
+          path: target/import/{email}/{importId}
+          method: get
+          cors: true
+  getTargets:
+    handler: src/targetOps.getAllTargetsHandler
+    events:
+      - http:
+          path: targets/{email}
+          method: get
+          cors: true
+  getTarget:
+    handler: src/targetOps.getTargetHandler
+    events:
+      - http:
+          path: target/{email}/{importId}
+          method: get
+          cors: true
+  targetUpload:
+    handler: src/targetUpload.handler
+    events:
+      - http:
+          path: face/target
+          method: put
+          cors: true
+    environment:
+        STEP_FUNCTION_ARN:
+          Fn::GetAtt: [TargetProcessStateMachine, Arn]
+  targetProcess:
+    handler: src/targetProcess.handler
+  sourceUpload:
+    handler: src/sourceUpload.handler
+    events:
+      - http:
+          path: face/source
+          method: put
+          cors: true
+    environment:
+        STEP_FUNCTION_ARN:
+          Fn::GetAtt: [SourceProcessStateMachine, Arn]  
+    timeout: 30
+  sourceImageVerifier:
+    handler: src/sourceImageVerifier.handler
+  sourceImageProcess:
+    handler: src/sourceImageProcess.handler
+
+stepFunctions:
+  stateMachines:
+    sourceProcessStateMachine:
+      name: SourceProcessStateMachine
+      definition:
+        Comment: "Source Image Process Step Function"
+        StartAt: imageVerify
+        States:
+          imageVerify:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sourceImageVerifier, Arn]
+            Next: sourceProcess
+          sourceProcess:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [sourceImageProcess, Arn]
+            End: true
+      role: arn:aws:iam::299645166512:role/LabRole
+    targetProcessStateMachine:
+      name: TargetProcessStateMachine
+      definition:
+        Comment: "Target Image Process Step Function"
+        StartAt: targetProcess
+        States:
+          targetProcess:
+            Type: Task
+            Resource:
+              Fn::GetAtt: [targetProcess, Arn]
+            End: true
+      role: arn:aws:iam::299645166512:role/LabRole
+
+resources:
+  Resources:
+    faceDataBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: face-data-5409-ta-2
+    faceSourceTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: face-source
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+          - AttributeName: faceLabel
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+          - AttributeName: faceLabel
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
+    faceTargetTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: face-target
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+          - AttributeName: importId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+          - AttributeName: importId
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
+    userTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: users
+        AttributeDefinitions:
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: email
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2

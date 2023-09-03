@@ -1,0 +1,15 @@
+.form-container{
+    display: grid;
+    height: 100%;
+}
+
+.form-container > div {
+    align-self: center;
+    border: 1px solid #ccc;
+    border-radius: 0.5em;
+    box-shadow: 0.2em 0.2em 0.6em #ccc;
+}
+
+.form-container button{
+    margin-bottom: 0.8em;
+}
